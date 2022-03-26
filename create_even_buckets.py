@@ -11,7 +11,6 @@ def getTotalHeightOfBucket(bucket):
         totalHeight += segment.size[1]
     return totalHeight
 
-
 def getMaxTotalHeight(buckets):
     maxHeight = 0
     for bucket in buckets:
@@ -31,7 +30,7 @@ def stichEvenRows(segments, outputImagePath, singleSize, numbuckets, shuffle=Fal
         random.seed(seed)
         random.shuffle(sortedSegments)
     else:
-        sortedSegments = sorted(segments, key=lambda x: x.size[1])
+        sortedSegments = sorted(segments, key=lambda x: x.size[1], reverse=True)
 
     buckets = []
 
@@ -40,7 +39,6 @@ def stichEvenRows(segments, outputImagePath, singleSize, numbuckets, shuffle=Fal
         buckets.append([])
     
     for segment in sortedSegments:
-        #determine current max height of the buckets
         maxHeight = getMaxTotalHeight(buckets)
 
         #find the bucket that has the most difference to the current max height
@@ -53,7 +51,6 @@ def stichEvenRows(segments, outputImagePath, singleSize, numbuckets, shuffle=Fal
                 maxDiff = diff
                 maxDiffIndex = index
 
-        #add segment to bucket
         buckets[maxDiffIndex].append(segment)
 
     maxHeight = 0
@@ -63,18 +60,15 @@ def stichEvenRows(segments, outputImagePath, singleSize, numbuckets, shuffle=Fal
             totalHeight += segment.size[1]
         maxHeight = max(maxHeight, totalHeight)
 
-    #create image to hold all contents of the buckets
     newImg = Image.new(('RGB'), (singleSize * numbuckets, maxHeight))
     
-    #paste bucket into new image
     for index, bucket in enumerate(buckets):
         y = 0
         for segment in bucket:
             newImg.paste(segment, (index * singleSize, y))
             y += segment.size[1]
 
-    #save image
-    storeImage(newImg, outputImagePath, "_evenRows")
+    storeImage(newImg, outputImagePath, "_buckets")
 
 def stichAndSave(sortedSegments, suffix, outputImagePath, wSegments, hSegments, singleSize):
     newImg = Image.new(('RGB'), (wSegments * singleSize, hSegments * singleSize))
@@ -98,17 +92,21 @@ def main(argv):
     imageSectionSize = 0
     inputImagePath = ""
     outputImagePath = ""
+    numberBuckets = 0
+    minYPixelsForSegment = 2
+    shuffle = False
+    seed = -1
 
     try:
-        opts, args = getopt.getopt(argv,"hi:o:s:",["help","inimage=","outimage=","segment_size="])
+        opts, args = getopt.getopt(argv,"hi:o:s:b:m:s:",["help","inimage=","outimage=","segment_size=","buckets=","min_y_pixels=", "random_seed="])
     except getopt.GetoptError:
-        print(f"group_similar.py -o <outimage> -i <inimage> -s <segment_size>")
+        print(f"create_even_buckets.py -o <outimage> -i <inimage> -s <segment_size> -b <buckets> -m <min_y_pixels> -r <random_seed> (or -1 for no random seed)")
         sys.exit(2)
 
     for opt, arg in opts:
         print(f"parsing opt: {opt} arg: {arg}")
         if opt == '-h':
-            print(f"group_similar.py -o <outimage> -i <inimage> -s <segment_size>")
+            print(f"create_even_buckets.py -o <outimage> -i <inimage> -s <segment_size> -b <buckets> -m <min_y_pixels> -r <random_seed> (or -1 for no random seed)")
             sys.exit(1)
         elif opt in ("-o", "--output"):
             outputImagePath = arg
@@ -116,6 +114,16 @@ def main(argv):
             inputImagePath = arg
         elif opt in ("-s", "--segment_size"):
             imageSectionSize = int(arg)
+        elif opt in ("-b", "--buckets"):
+            numberBuckets = int(arg)
+        elif opt in ("-m", "--min_y_pixels"):
+            minYPixelsForSegment = int(arg)
+        elif opt in ("-r", "--random_seed"):
+            if arg == "-1":
+                shuffle = False
+            else:
+                shuffle = True
+                seed = int(arg)
 
     #load image into memory
     if not os.path.exists(inputImagePath):
@@ -141,27 +149,12 @@ def main(argv):
 
     croppedSegments = []
     for segment in segments:
-        cropped = cropBlackbarsFromImage(segment, precrop=5, blackThreshold=5, rowThreshold=0.95, minRowsForBorder=3)      
-        if cropped.size[1] > 10:  
+        cropped = cropBlackbarsFromImage(segment, precrop=5, blackThreshold=10, rowThreshold=0.90, minRowsForBorder=3)      
+        if cropped.size[1] > minYPixelsForSegment:  
             croppedSegments.append(cropped)
 
-    stichEvenRows(croppedSegments, outputImagePath, singleSize, numbuckets=10, shuffle=True)
+    stichEvenRows(croppedSegments, outputImagePath, singleSize, numberBuckets, shuffle, seed)
+    return
 
-    #sort segments by their height
-    sortedSegments = sorted(segments, key=lambda x: x.size[1])
-    #paste images into one horizontal image and paste segements
-    stichAndSave(sortedSegments, "_horizontal", outputImagePath, len(sortedSegments), 1, singleSize)
-
-    #sort segments based on the color temperature
-    sortedSegments = sorted(sortedSegments, key=lambda x: x.getpixel((0,0)))
-    #stich image together
-    stichAndSave(sortedSegments, "_temperature", outputImagePath, wSegments, hSegments, singleSize)
-
-    #sort all segments again based on their amount of black pixels
-    sortedSegments = sorted(sortedSegments, key=lambda x: x.getbbox()[3])
-    stichAndSave(sortedSegments, "_black-pixels", outputImagePath, wSegments, hSegments, singleSize)
-
-
-#program entry 
 if __name__ == "__main__":
     main(sys.argv[1:])
