@@ -109,6 +109,9 @@ def returnPressed(event):
 def updateResultImage():
 	newImage = stichEvenRows(state.allSegmentsRaw, state.tileSize, state.numBuckets)	
 	newImage = newImage.resize((state.referenceImage.width, state.referenceImage.height))
+	#save image with prompt
+	newImage.save(querySaveAs())
+
 
 def loadImageTileFromAllInDirectory():
 	global state

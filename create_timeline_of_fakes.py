@@ -52,8 +52,10 @@ def main(argv):
         f.extend(filenames)
         break
 
+    print(f"found {len(f)} files")
+
     #filter out files to only include fakes
-    f = [file for file in f if 'fakes' in file]
+    f = [file for file in f if 'fakes' in file or 'seed' in file]
     f = [file for file in f if '.png' in file]
     f = [file for file in f if not 'init' in file]
     f = [file for file in f if not 'fakes000000.png' in file]

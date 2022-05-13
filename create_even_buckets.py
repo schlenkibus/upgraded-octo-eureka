@@ -24,13 +24,13 @@ def storeImage(segment, outputPath, suffix):
 
 def stichEvenRows(segments, outputImagePath, singleSize, numbuckets, shuffle=False, seed=187, backgroundColor=(0,0,0)):
 
-    sortedSegments = segments
+    sortedSegments = sorted(segments, key=lambda x: x.size[1], reverse=True)
 
-    if shuffle:
-        random.seed(seed)
-        random.shuffle(sortedSegments)
-    else:
-        sortedSegments = sorted(segments, key=lambda x: x.size[1], reverse=True)
+    #drop N segments that would not fit in a bucket
+    remainder = len(sortedSegments) % numbuckets
+    if remainder > 0:
+        print(f"dropping {remainder} segments not fitting in {numbuckets} buckets")
+        sortedSegments = sortedSegments[:-remainder]
 
     buckets = []
 
@@ -62,21 +62,33 @@ def stichEvenRows(segments, outputImagePath, singleSize, numbuckets, shuffle=Fal
 
     newImg = Image.new(('RGB'), (singleSize * numbuckets, maxHeight))
     
+    
+    if shuffle:
+        random.seed(seed)
+
     for index, bucket in enumerate(buckets):
         y = 0
+        if shuffle:
+            random.shuffle(bucket)
+
         for segment in bucket:
             newImg.paste(segment, (index * singleSize, y))
             y += segment.size[1]
 
     if shuffle:
-        storeImage(newImg, outputImagePath, f"_buckets_shuffled_{seed}")
+        storeImage(newImg, outputImagePath, f"_{numbuckets}_buckets_shuffled_{seed}")
     else:
-        storeImage(newImg, outputImagePath, "_buckets")
+        storeImage(newImg, outputImagePath, f"_{numbuckets}_buckets")
 
-def cropBlackbarsFromImage(segment, precrop, blackThreshold=1, rowThreshold=0.99, minRowsForBorder=3):
-    preprocessed = segment.crop((0, precrop, segment.size[0], segment.size[1] - precrop))
-    borders = bordercrop.borders(preprocessed, blackThreshold, segment.size[0] * rowThreshold, minRowsForBorder)
-    print(borders)
+def cropBlackbarsFromImage(segment, precrop, blackThreshold=7, rowThreshold=265, minRowsForBorder=3):
+    oldSize = segment.size
+    preprocessed = segment#.crop((0, precrop, segment.size[0], segment.size[1] - precrop))
+    borders = bordercrop.borders(preprocessed, blackThreshold, rowThreshold, minRowsForBorder)
+    newStartY = min(borders[1], borders[3])
+    newEndY = max(borders[1], borders[3])
+    newHeight = newEndY - newStartY
+    print(f"newSize: {newHeight}, {abs(borders[0] - borders[2])}")
+    #assert oldSize[1] == borders[2]
     return preprocessed.crop(borders)
 
 def getSegments(image, singleSize):
@@ -98,9 +110,10 @@ def main(argv):
     inputImagePath = ""
     outputImagePath = ""
     numberBuckets = 0
-    minYPixelsForSegment = 2
+    minYPixelsForSegment = 15
     shuffle = False
     seed = -1
+    range_buckets = None
 
     try:
         opts, args = getopt.getopt(argv,"hi:o:s:b:m:s:r:",["help","inimage=","outimage=","segment_size=","buckets=","min_y_pixels=", "random_seed="])
@@ -120,7 +133,11 @@ def main(argv):
         elif opt in ("-s", "--segment_size"):
             imageSectionSize = int(arg)
         elif opt in ("-b", "--buckets"):
-            numberBuckets = int(arg)
+            #if arg is of number-number assign range_buckets
+            if "-" in arg:
+                range_buckets = arg.split("-")
+            else:
+                numberBuckets = int(arg)
         elif opt in ("-m", "--min_y_pixels"):
             minYPixelsForSegment = int(arg)
         elif opt in ("-r", "--random_seed"):
@@ -150,14 +167,20 @@ def main(argv):
             segments.append(segment)
 
     croppedSegments = []
-    for segment in segments:
-        cropped = cropBlackbarsFromImage(segment, precrop=0, blackThreshold=128, rowThreshold=0.99, minRowsForBorder=3)      
-        #if cropped.size[1] > minYPixelsForSegment:  
-        croppedSegments.append(cropped)
-
+    for it, segment in enumerate(segments):
+        cropped = cropBlackbarsFromImage(segment, precrop=0, blackThreshold=35, rowThreshold=450, minRowsForBorder=20)      
+        if cropped.size[1] > minYPixelsForSegment and cropped.size[0] == imageSectionSize:
+            croppedSegments.append(cropped)
+        else:
+            print(f"segment {it} too small: {cropped.size}")
     print(len(croppedSegments))
 
-    stichEvenRows(croppedSegments, outputImagePath, imageSectionSize, numberBuckets, shuffle, seed)
+
+    if range_buckets != None:
+        for i in range(int(range_buckets[0]), int(range_buckets[1]) + 1):
+            stichEvenRows(croppedSegments, outputImagePath, imageSectionSize, i, shuffle, seed)
+    else:
+        stichEvenRows(croppedSegments, outputImagePath, imageSectionSize, numberBuckets, shuffle, seed)
     return
 
 if __name__ == "__main__":
