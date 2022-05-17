@@ -4,6 +4,7 @@ import os
 from PIL import Image, ImageFilter
 import bordercrop
 import random
+import colorthief, colorsys
 
 def getTotalHeightOfBucket(bucket):
     totalHeight = 0
@@ -22,7 +23,29 @@ def storeImage(segment, outputPath, suffix):
     pwd = os.getcwd()
     segment.save(pwd + name + suffix + ".png")
 
-def stichEvenRows(segments, outputImagePath, singleSize, numbuckets, shuffle=False, seed=187, backgroundColor=(0,0,0)):
+def rgb_to_hsv(rgb):
+    r = rgb[0]
+    g = rgb[1]
+    b = rgb[2]
+    maxc = max(r, g, b)
+    minc = min(r, g, b)
+    v = maxc
+    if minc == maxc:
+        return 0.0, 0.0, v
+    s = (maxc-minc) / maxc
+    rc = (maxc-r) / (maxc-minc)
+    gc = (maxc-g) / (maxc-minc)
+    bc = (maxc-b) / (maxc-minc)
+    if r == maxc:
+        h = bc-gc
+    elif g == maxc:
+        h = 2.0+rc-bc
+    else:
+        h = 4.0+gc-rc
+    h = (h/6.0) % 1.0
+    return h, s, v
+
+def stichEvenRows(segments, outputImagePath, singleSize, numbuckets, shuffle=False, seed=187, colorOrder='h'):
 
     sortedSegments = sorted(segments, key=lambda x: x.size[1], reverse=True)
 
@@ -70,6 +93,9 @@ def stichEvenRows(segments, outputImagePath, singleSize, numbuckets, shuffle=Fal
         y = 0
         if shuffle:
             random.shuffle(bucket)
+        else:
+            colorOrderIndex = str("hsv").index(colorOrder)
+            bucket = sorted(bucket, key=lambda x: rgb_to_hsv(colorthief.ColorThief(x).get_color(5))[colorOrderIndex], reverse=True)
 
         for segment in bucket:
             newImg.paste(segment, (index * singleSize, y))
@@ -78,7 +104,7 @@ def stichEvenRows(segments, outputImagePath, singleSize, numbuckets, shuffle=Fal
     if shuffle:
         storeImage(newImg, outputImagePath, f"_{numbuckets}_buckets_shuffled_{seed}")
     else:
-        storeImage(newImg, outputImagePath, f"_{numbuckets}_buckets")
+        storeImage(newImg, outputImagePath, f"_{numbuckets}_buckets_{colorOrder}")
 
 def cropBlackbarsFromImage(segment, precrop, blackThreshold=7, rowThreshold=265, minRowsForBorder=3):
     oldSize = segment.size
@@ -114,11 +140,12 @@ def main(argv):
     shuffle = False
     seed = -1
     range_buckets = None
+    colorOrder = 'h' # 'h' for hue, 's' for saturation, 'v' for value
 
     try:
-        opts, args = getopt.getopt(argv,"hi:o:s:b:m:s:r:",["help","inimage=","outimage=","segment_size=","buckets=","min_y_pixels=", "random_seed="])
+        opts, args = getopt.getopt(argv,"hi:o:s:b:m:s:r:c:",["help","inimage=","outimage=","segment_size=","buckets=","min_y_pixels=", "random_seed=", "color_order="])
     except getopt.GetoptError:
-        print(f"create_even_buckets.py -o <outimage> -i <inimage> -s <segment_size> -b <buckets> -m <min_y_pixels> -r <random_seed> (or -1 for no random seed)")
+        print(f"create_even_buckets.py -o <outimage> -i <inimage> -s <segment_size> -b <buckets> -m <min_y_pixels> -r <random_seed> (or -1 for no random seed) -c <color_order> (h for hue, s for saturation, v for value, only applicable if -r is set to -1)")
         sys.exit(2)
 
     for opt, arg in opts:
@@ -146,6 +173,9 @@ def main(argv):
             else:
                 shuffle = True
                 seed = int(arg)
+        elif opt in ("-c", "--color_order"):
+            if arg in ('h', 's', 'v'):
+                colorOrder = arg
 
     isDirectory = os.path.isdir(inputImagePath)
     
@@ -167,8 +197,11 @@ def main(argv):
             segments.append(segment)
 
     croppedSegments = []
+    rowThresHoldInPercent = 0.8789
+    rowThresHoldInPixels = rowThresHoldInPercent * imageSectionSize
+
     for it, segment in enumerate(segments):
-        cropped = cropBlackbarsFromImage(segment, precrop=0, blackThreshold=35, rowThreshold=450, minRowsForBorder=20)      
+        cropped = cropBlackbarsFromImage(segment, precrop=0, blackThreshold=35, rowThreshold=rowThresHoldInPixels, minRowsForBorder=20)      
         if cropped.size[1] > minYPixelsForSegment and cropped.size[0] == imageSectionSize:
             croppedSegments.append(cropped)
         else:
@@ -178,9 +211,9 @@ def main(argv):
 
     if range_buckets != None:
         for i in range(int(range_buckets[0]), int(range_buckets[1]) + 1):
-            stichEvenRows(croppedSegments, outputImagePath, imageSectionSize, i, shuffle, seed)
+            stichEvenRows(croppedSegments, outputImagePath, imageSectionSize, i, shuffle, seed, colorOrder)
     else:
-        stichEvenRows(croppedSegments, outputImagePath, imageSectionSize, numberBuckets, shuffle, seed)
+        stichEvenRows(croppedSegments, outputImagePath, imageSectionSize, numberBuckets, shuffle, seed, colorOrder)
     return
 
 if __name__ == "__main__":
