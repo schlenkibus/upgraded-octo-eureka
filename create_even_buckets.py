@@ -1,4 +1,5 @@
 import getopt
+from logging import exception
 import sys
 import os
 from PIL import Image, ImageFilter
@@ -21,7 +22,8 @@ def getMaxTotalHeight(buckets):
 def storeImage(segment, outputPath, suffix):
     name = outputPath.split(".")[0]
     pwd = os.getcwd()
-    segment.save(pwd + name + suffix + ".png")
+    fullPath = pwd + name + suffix + ".png"
+    segment.save(fullPath)
 
 def rgb_to_hsv(rgb):
     r = rgb[0]

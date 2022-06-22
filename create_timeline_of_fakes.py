@@ -11,12 +11,13 @@ def main(argv):
     segmentsize = 0
     index_of_interest_x = 0
     index_of_interest_y = 0
+    num_segments = 0
 
     #parse arguments to this script
     try:
-        opts, args = getopt.getopt(argv,"hi:o:s:x:y:",["help","indir=","outfile=","segment_size=","x=","y="])
+        opts, args = getopt.getopt(argv,"hi:o:s:x:y:n:",["help","indir=","outfile=","segment_size=","x=","y=","num_segments="])
     except getopt.GetoptError:
-        print(f"create_timeline_of_fakes.py -o <outfile> -i <indir> -s <segment_size> -x <x> -y <y>")
+        print(f"create_timeline_of_fakes.py -o <outfile> -i <indir> -s <segment_size> -x <x> -y <y> -n <num_segments>")
         sys.exit(2)
 
     print(args)
@@ -25,7 +26,7 @@ def main(argv):
     for opt, arg in opts:
         print(f"parsing opt: {opt} arg: {arg}")
         if opt == '-h':
-            print(f"create_timeline_of_fakes.py -o <outfile> -i <indir> -s <segment_size> -x <x> -y <y>")
+            print(f"create_timeline_of_fakes.py -o <outfile> -i <indir> -s <segment_size> -x <x> -y <y> -n <num_segments>")
             sys.exit(1)
         elif opt in ("-o", "--output"):
             outfile = arg
@@ -37,7 +38,10 @@ def main(argv):
             index_of_interest_y = int(arg)
         elif opt in ("-s", "--segment_size"):
             segmentsize = int(arg)
+        elif opt in ("-n", "--num_segments"):
+            num_segments = int(arg)
 
+    print(indir)
 
     if not os.path.isdir(indir):
         print(f"{indir} is not an directory")
@@ -55,10 +59,10 @@ def main(argv):
     print(f"found {len(f)} files")
 
     #filter out files to only include fakes
-    f = [file for file in f if 'fakes' in file or 'seed' in file]
-    f = [file for file in f if '.png' in file]
-    f = [file for file in f if not 'init' in file]
-    f = [file for file in f if not 'fakes000000.png' in file]
+    #f = [file for file in f if 'fakes' in file or 'seed' in file]
+    #f = [file for file in f if '.png' in file]
+    #f = [file for file in f if not 'init' in file]
+    #f = [file for file in f if not 'fakes000000.png' in file]
     print(f"filtered {f}")
     #sort files based on number
     list.sort(f)
@@ -76,6 +80,11 @@ def main(argv):
 
     newImg = Image.new(('RGB'), [len(segments) * singleSize, singleSize])
     xIndex = 0
+
+    #use only the first num_segments
+    if num_segments > 0:
+        segments = segments[:num_segments]
+
     for segment in segments:
         x = int(xIndex * singleSize)
         newImg.paste(segment, (x, 0))
